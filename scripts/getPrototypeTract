@@ -1,0 +1,75 @@
+#!/Users/demian/software/Slicer3-lib/python-build/bin/python
+
+svn_version = "$Rev: 106 $"
+svn_date = "$Date: 2010-05-06 15:28:18 -0400 (Thu, 06 May 2010) $"
+
+from optparse import OptionParser
+import gzip
+
+import numpy
+
+import tractographyGP as tgp
+from tractographyGP import vtkInterface
+
+def main():
+  parser = OptionParser(version=svn_version)
+  parser.add_option("-i", "--input", dest="tractographyFile", 
+                    help="name of the tractography file")
+  parser.add_option('-o',"--output",dest="prototypeTract",
+                    help="file with the prototype tract")
+  parser.add_option("-u","--subsample", dest="subsample", type="int",
+                    help="maximal number of points of a fiber, ignoring the parameter means no subsampling")
+  parser.add_option("-s", "--innerproduct_save",
+                     dest="ipsFileNameSave",
+                    help="inner product file name to save")
+  parser.add_option("-p", "--innerproduct",
+                     dest="ipsFileName",
+                    help="inner product file name to use for clustering")
+
+  (options, args) = parser.parse_args()
+
+  if not options.tractographyFile or not options.prototypeTract: 
+    parser.error("incorrect number of arguments")
+
+
+
+  if not options.ipsFileName:
+    tr = tgp.tractography.tractography()
+    tr.from_dictionary( tgp.vtkInterface.readVtkPolyData(options.tractographyFile, xmlFormat=options.tractographyFile.endswith('vtp')) )
+
+
+
+    if options.subsample:
+      try:
+        options.subsample = int( options.subsample )
+      except ValueError:
+        parser.error("subsample value must be an integer")
+      
+      tr.subsampleFibers(options.subsample)
+
+    gps = [ tgp.fiberGPAnalysis.fiberGP( f ) for f in tr.getFibersToProcess() ]
+
+    ips = numpy.zeros( (len(gps),len(gps)), dtype='float32')
+
+    for i in xrange(len(gps)):
+      for j in xrange(0,i+1):
+        ips[i,j] = tgp.fiberGPAnalysis.innerProduct_thinPlate_R3(gps[i],gps[j])
+        ips[j,i] = ips[i,j]
+      print "Inner product matrix: %3.0f %%  done (%d of %d)"%( ((i+1)**2.)/(len(gps)**2.)*100., i, len(gps))
+
+    if options.ipsFileNameSave:
+      numpy.savez( options.ipsFileNameSave, ips )
+  else:
+    ips = numpy.load( options.ipsFileName )
+    ips = ips[ips.files[0]]
+
+  prototypeTractIndex = ips.sum(0).argmax()
+
+  prototypeTract = tr.getOriginalFibers()[prototypeTractIndex]
+
+  print "Resulting prototype tract number: ",prototypeTractIndex
+  vtkInterface.writeLinesToVtkPolyData(options.prototypeTract,[prototypeTract])
+
+if __name__ == "__main__":
+    main()
+

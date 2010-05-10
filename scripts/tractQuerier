@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+
+svn_version = "$Rev: 108 $"
+svn_date = "$Date: 2010-05-09 14:17:49 -0400 (Sun, 09 May 2010) $"
+
+import sys
+from optparse import OptionParser
+import gzip
+import cPickle
+
+
+import nifti
+import tractographyGP as tgp
+from tractographyGP import vtkInterface
+from tractographyGP import dendrogramAtlasAnalysis  as daa   
+
+def tractQuerier( tractography, atlas, dendrogram, queries, threshold ):
+  da = daa.DendrogramVolumeLabelAnalysis(
+      tractography, 
+      atlas.getDataArray().swapaxes(0,-1), 
+      atlas.getInverseQForm(),
+      dendrogram
+      )
+  qr = da.getTractsCrossingSectionsQuerier()
+  clusters = [ c for c in [ qr.getTractOptimizingSectionCrossing( q, threshold=threshold )[0] for q in queries ] if c!=None ]
+
+  return clusters
+
+
+def main():
+  parser = OptionParser(version=svn_version)
+  parser.add_option("-d", "--dendrogram", dest="dendrogramFileName",
+                    help="name of the dendrogram file")
+  parser.add_option("-t", "--tractography", dest="tractographyFileName", 
+                    help="name of the tractography file")
+  parser.add_option("-a", "--atlas", dest="atlasFileName", 
+                    help="name of the atlas file")
+  parser.add_option("-q", "--queries", dest="queriesString", 
+                    help="query to run")
+  parser.add_option('-o',"--output",dest="outputFileName",
+                    help="clustering output file prefix")
+  parser.add_option('-r',"--threshold",dest="threshold", default="0.01",
+                    help="minimum probability threshold")
+  parser.add_option('-c',"--centeredImage", dest="centeredImage", default=False, action="store_true",
+                    help="Ignore the atlas translation of the QForm")
+  parser.add_option('-x',"--flipX", dest="flipX", default=False, action="store_true",
+                    help="flip the X coordinate")
+  parser.add_option('-y',"--flipY", dest="flipY", default=False, action="store_true",
+                    help="flip the Y coordinate")
+  parser.add_option('-z',"--flipZ", dest="flipZ", default=False, action="store_true",
+                    help="flip the Z coordinate")
+
+  (options, args) = parser.parse_args()
+
+  if not options.tractographyFileName or not options.atlasFileName or not options.queriesString or not options.outputFileName or not options.dendrogramFileName:
+    parser.error("incorrect number of arguments")
+
+  queries = [ [ int(i) for i in q.split('+') ] for q in options.queriesString.split(',') ]
+  print "reading data"
+  atlas = nifti.NiftiImage(options.atlasFileName)
+  dendrogram = cPickle.load(openGzipOrNot( options.dendrogramFileName ))
+
+  tractography = tgp.tractography.tractography()
+  tractography.from_dictionary( vtkInterface.readVtkPolyData(options.tractographyFileName, xmlFormat=options.tractographyFileName.endswith('vtp')) )
+  threshold = float( options.threshold )
+
+  numberOfFibers = len( tractography.getOriginalFibers() )
+  numberOfFibersInCluster = max([ n[1][0] for n in dendrogram if n[0]==0])
+
+  if numberOfFibers<numberOfFibersInCluster:
+    print "Dendrogram calculated from a different tractography (%d>%d)"%(numberOfFibersInCluster,numberOfFibers)
+    sys.exit(1)
+ 
+  if options.flipX or options.flipY or options.flipZ or options.centeredImage:
+    from numpy import dot,transpose, eye
+    qf = atlas.getQForm().copy()
+
+    if options.centeredImage:
+      qf[:-1,-1]=0
+
+    e = eye(4)
+    e[0,0]=-1 if options.flipX else 1
+    e[1,1]=-1 if options.flipY else 1
+    e[2,2]=-1 if options.flipZ else 1
+    qf = dot(qf,e)
+
+    atlas.setQForm(qf)
+ 
+  print "querying"
+  clusters = tractQuerier( tractography, atlas, dendrogram, queries, threshold )
+
+  originalFibers = tractography.getOriginalFibers()
+  print "Resulting clusters: ", clusters
+
+
+  for c in xrange(len(clusters)):
+    clusterNumber = clusters[c]
+    clusterLines = [ originalFibers[f] for f in dendrogram[clusterNumber][1] ]
+
+    clusterLinesData = {}
+    for key,data in tractography.getOriginalFibersData().items():
+      clusterLinesData[key] =  [ data[f] for f in dendrogram[clusterNumber][1] ]
+
+    vtkInterface.writeLinesToVtkPolyData(options.outputFileName+"_%0.4d_%0.6d.vtk"%(c,clusterNumber), clusterLines, clusterLinesData)
+
+
+def openGzipOrNot( fname ):
+  if fname.endswith('gz'):
+    return gzip.open(fname)
+  else:
+    return open(fname)
+
+
+if __name__ == "__main__":
+    main()
+
+

@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+svn_version = "$Rev: 108 $"
+svn_date = "$Date: 2010-05-09 14:17:49 -0400 (Sun, 09 May 2010) $"
+
+from optparse import OptionParser
+import gzip
+import cPickle
+
+import numpy
+
+import tractographyGP as tgp
+def main():
+  parser = OptionParser(version=svn_version)
+  parser.add_option("-i", "--input", dest="tractographyFile", 
+                    help="name of the tractography file")
+  parser.add_option('-o',"--output",dest="dendrogramFileName",
+                    help="dendrogram output file")
+  parser.add_option("-s", "--innerproduct_save",
+                     dest="ipsFileNameSave",
+                    help="inner product file name to save")
+  parser.add_option("-p", "--innerproduct",
+                     dest="ipsFileName",
+                    help="inner product file name to use for clustering")
+  parser.add_option("-u","--subsample", dest="subsample",
+                    help="maximal number of points of a fibre (default is 20)")
+
+  (options, args) = parser.parse_args()
+
+  if (not options.tractographyFile or not options.ipsFileName) and not options.dendrogramFileName:
+    parser.error("incorrect number of arguments")
+
+
+
+  if not options.ipsFileName:
+    tr = tgp.tractography.tractography()
+    tr.from_dictionary( tgp.vtkInterface.readVtkPolyData(options.tractographyFile, xmlFormat=options.tractographyFile.endswith('vtp')) )
+
+
+    try:
+      if not options.subsample:
+        options.subsample = 20
+      else:
+        options.subsample = int( options.subsample )
+    except ValueError:
+      parser.error("subsample value must be an integer")
+
+
+    tr.subsampleFibers(options.subsample)
+
+    gps = [ tgp.fiberGPAnalysis.fiberGP( f ) for f in tr.getFibersToProcess() ]
+
+    ips = numpy.zeros( (len(gps),len(gps)), dtype='float32')
+
+    for i in xrange(len(gps)):
+      for j in xrange(0,i+1):
+        ips[i,j] = tgp.fiberGPAnalysis.innerProduct_thinPlate_R3(gps[i],gps[j])
+        ips[j,i] = ips[i,j]
+      print "Inner product matrix: %3.0f %% done (%d of %d)"%(((i+1)**2.)/(len(gps)**2.)*100, i, len(gps))
+
+    if options.ipsFileNameSave:
+      numpy.savez( options.ipsFileNameSave, ips )
+  else:
+    ips = numpy.load( options.ipsFileName )
+    ips = ips[ips.files[0]]
+
+  hie =  tgp.agglomerativeClustering.innerProductHierarchicalClustering( ips )[0]
+
+  if not options.dendrogramFileName.endswith('gz'):
+    options.dendrogramFileName+=('.gz')
+
+  cPickle.dump( hie, gzip.open(options.dendrogramFileName,'wb'), protocol=2 )
+
+
+if __name__ == "__main__":
+    main()
+
