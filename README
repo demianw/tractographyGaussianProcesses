@@ -1,0 +1,5 @@
+This software implements the clustering method described in 
+
+D. Wassermann, L. Bloy, E. Kanterakis, R. Verma, and R. Deriche. Unsupervised white matter fiber clustering and tract probability map generation: Applications of a gaussian process framework for white matter fibers. NeuroImage, 51(1):228–241, 2010.
+
+If you use it you MUST cite this journal publication.
