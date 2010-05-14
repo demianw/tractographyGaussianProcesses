@@ -10,11 +10,8 @@ _linesHeader = "LINES %d %d\n"
 _pointDataHeader = "POINT_DATA %d\n"
 _pointDataAttributeHeader = "%s %s float"
 
-def readVtkPolyData(fileName, xmlFormat=False ):
-  if xmlFormat:
-    return _rvtk.c_pdrXML(fileName)
-  else:
-    return _rvtk.c_pdr(fileName)
+def readVtkPolyData(fileName):
+  return _rvtk.c_polyDataReader(fileName)
 
 def writeLinesToVtkPolyData( fileName, lines, pointData={} ):
   f = open(fileName,'w')

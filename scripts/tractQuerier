@@ -61,7 +61,7 @@ def main():
   dendrogram = cPickle.load(openGzipOrNot( options.dendrogramFileName ))
 
   tractography = tgp.tractography.tractography()
-  tractography.from_dictionary( vtkInterface.readVtkPolyData(options.tractographyFileName, xmlFormat=options.tractographyFileName.endswith('vtp')) )
+  tractography.from_dictionary( vtkInterface.readVtkPolyData(options.tractographyFileName) )
   threshold = float( options.threshold )
 
   numberOfFibers = len( tractography.getOriginalFibers() )

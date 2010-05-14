@@ -35,7 +35,7 @@ def main():
 
   if not options.ipsFileName:
     tr = tgp.tractography.tractography()
-    tr.from_dictionary( tgp.vtkInterface.readVtkPolyData(options.tractographyFile, xmlFormat=options.tractographyFile.endswith('vtp')) )
+    tr.from_dictionary( tgp.vtkInterface.readVtkPolyData(options.tractographyFile) )
 
 
 
