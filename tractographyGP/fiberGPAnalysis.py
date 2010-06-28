@@ -442,7 +442,7 @@ def innerProduct_thinPlate_R3( fiberGP1, fiberGP2 ):
 
   distmatrix = sqrt(((fiber2[newaxis,...,:]-fiber1[...,newaxis,:])**2).sum(-1))
 
-  if len(fiber1)==len(fiber2):
+  if fiber1 is fiber2:
     bt.innerproduct_thinplate3d_normalized( distmatrix, R, Q, symm=True)
   else:
     bt.innerproduct_thinplate3d_normalized( distmatrix, R, Q, symm=False)
