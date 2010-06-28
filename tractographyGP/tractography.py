@@ -91,6 +91,9 @@ class tractography:
 
     for k in d['pointData']:
       array_data = d['pointData'][k]
+      if not isinstance(array_data, _numpy.ndarray):
+        continue
+
       self._originalData[ k ] = array_data
       self._fiberData[ k ] =  map( lambda f: array_data[ f ], self._originalLines )
 
