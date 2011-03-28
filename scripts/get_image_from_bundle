@@ -1,0 +1,200 @@
+#!/usr/bin/env python
+
+__version__ = "$Tag:v1.00$".replace('$Tag:v1.00$','')
+__revision__ = "$Revision:25-g17dbde4$".replace('Revision:','').replace('$','')
+__date__ = "$Format:%cd$".replace('Date:','').replace('$','')
+
+
+from optparse import OptionParser
+import gc
+import pdb
+import sys
+
+
+def main():
+    parser = OptionParser(version=__version__)
+    usage = r"""
+    %prog  -o imagefile.nii.gz bundle1.vtk ..... bundleN.vtk
+    """
+    parser.set_usage(usage)
+    choices = ["mean", "variance", "probability"]
+    parser.add_option("-t", "--type", dest="type", type="choice", default="mean", choices=choices,
+                      help="type of image to be computed: "+str(choices)+", default: %default")
+    parser.add_option("-b", "--box", dest="box", type="string",
+                      help="Bounding box for the obtained image")
+    parser.add_option("-r", "--resolution", dest="resolution", type="float", default=1,
+                      help="Resolution of the obtained image, default: %default")
+    parser.add_option("-u", "--subsampling", dest="subsampling", type="int", default=0,
+                      help="subsampling of the input fibers, default: no subsampling")
+    parser.add_option("-o", "--output", dest="output", type="string",
+                      help="output image name")
+    parser.add_option("-i", "--image", dest="image", type="string",
+                      help="input image file for output space")
+    parser.add_option('-m', "--medinria", dest="medinria", default=False, action="store_true",
+                      help="Interpret the transform in the same way that MedINRIA does")
+
+
+    options, args = parser.parse_args()
+    if len(args)==0 or not options.output:
+        parser.error("Incorrect number of arguments")
+
+    import os
+    import sys
+
+    import nibabel
+    import numpy as np
+    from numpy.lib import index_tricks as it
+
+    if not 'OMP_NUM_THREADS' in os.environ:
+        os.environ['OMP_NUM_THREADS'] = '1'
+
+    from tractographyGP import fiberGPAnalysis as fga
+
+    try:
+        tractography = read_tractographies( args, options.subsampling )
+    except ValueError as error:
+        parser.error( str(error) )
+    except IOError as error:
+        parser.error( str(error) )
+
+    print "Calculating gaussian processes"
+    sys.stdout.flush()
+    gps = [ fga.fiberGP( f ) for f in tractography.getFibersToProcess() ]
+    print "Done"
+    sys.stdout.flush()
+
+    if options.box is None:
+        full_bounding_box =  reduce( lambda x, y:  fga.unionBoundingBox( y.getAdjustedBoundingBox(), x ), gps[1:], gps[0].getAdjustedBoundingBox() )
+        print full_bounding_box
+    else:
+        full_bounding_box = np.array( [ float(f) for f in options.box.split(',') ] ).reshape(2,3)
+
+    if options.image:
+        src_image = nibabel.load( options.image )
+        new_image = np.zeros( src_image.get_shape()[:3] )
+
+
+        ijk2ras = src_image.get_affine()
+        if options.medinria:
+            ijk2ras = medinria_transform( ijk2ras )
+
+        ras2ijk = np.linalg.inv( ijk2ras )
+
+        ijk_bounding_box = np.array([ 
+            np.floor( np.dot( ras2ijk[:-1,:-1],  full_bounding_box[0] ) + ras2ijk[:-1,-1] ).astype(int), 
+            np.ceil( np.dot(ras2ijk[:-1,:-1], full_bounding_box[1] ) + ras2ijk[:-1,-1] ).astype(int) 
+        ])
+   
+        ijk_bounding_box_to_fill = fga.intersectionBoundingBox( ijk_bounding_box, [ [0,0,0],src_image.get_shape() ] )
+ 
+        dimensions = tuple( np.abs( ijk_bounding_box_to_fill[1] - ijk_bounding_box_to_fill[0] ) )
+      
+        coords_ijk = np.vstack([i.ravel() for i in np.indices( dimensions )]).T + ijk_bounding_box_to_fill[0] 
+        coords_ras = np.dot( ijk2ras[:-1,:-1], coords_ijk.T ).T + ijk2ras[:-1,-1] 
+
+        if options.type == "mean":
+            values = 0.
+            for i,gp in enumerate(gps):
+              print "Fiber %04d/%04d"%(i,len(gps))
+              sys.stdout.flush()
+              values += gp._mean( coords_ras )
+              gc.collect()
+            values /= float(len( gps ))
+        if options.type == "variance" or options.type == "probability":
+            variances = [ gp._cov( coords_ras ) for gp in gps ]
+            maximum_variance = np.max( np.asarray( variances ) )
+
+            values = sum( var - var.max() for var in variances )
+            values += maximum_variance
+            values /= 1. * len(gps) ** 2
+
+            if options.type == "probability":
+                values = fga.probImage(1, values )
+
+
+
+        new_image[ tuple( coords_ijk.T )] = values
+
+        nifti_image = nibabel.Nifti1Image( new_image, src_image.get_affine() )
+        nibabel.save( nifti_image, options.output )
+            
+    else:
+
+      if options.type == "mean":
+
+          image = 0
+          for i, g in enumerate( gps ):
+              print "GP %d of %d"%(i, len(gps) )
+              sys.stdout.flush()
+              image += g.getMeanFieldForBoundingBox(
+                  full_bounding_box,
+                  resolution = options.resolution
+              )
+              gc.collect()
+
+          image /= 1. * len(gps)
+
+      elif options.type == "variance" or options.type == "probability":
+
+          images = ( 
+              g.getVarianceFieldForBoundingBox( 
+                  full_bounding_box, 
+                  resolution=options.resolution
+              ) 
+              for g in gps )
+
+          image = images.next() 
+          maximum_variance = image.max()
+          image -= image.max()
+          for im in images:
+              m = im.max()
+              maximum_variance = max( maximum_variance, m )
+              image+= im-m
+          image += maximum_variance
+
+          image /= len(gps)**2
+          
+          if options.type == "probability" :
+              image = fga.probImage(1, image )
+
+      affine = np.eye(4)
+      affine[ (0, 1, 2), (0, 1, 2 ) ] = options.resolution
+      affine[ :-1, -1] = full_bounding_box[0]
+      
+
+      nifti_image = nibabel.Nifti1Image( image.T, affine )
+      nibabel.save( nifti_image, options.output )
+
+
+
+def read_tractographies( tractography_files, subsampling=0 ):
+    from tractographyGP import tractography
+    from tractographyGP import vtkInterface
+
+    tr = tractography.tractography()
+    tr.from_dictionary( vtkInterface.readVtkPolyData(tractography_files[0]) )
+    for tractography_file in tractography_files[1:]:
+        tr.from_dictionary( vtkInterface.readVtkPolyData(tractography_file), append=True )
+
+    if subsampling > 0:
+        tr.subsampleFibers(subsampling)
+
+    return tr
+
+def medinria_transform( affine ):
+    """
+    Get the corresponding medinria voxel to world transform
+    """
+    import numpy as np
+    new_affine = affine.copy()
+    new_affine[:,:-1] = 0
+    for i in xrange(3):
+        new_affine[i,i] = np.linalg.norm(affine[:-1,i])
+    new_affine[0:2,-1]*=-1
+
+    return new_affine
+
+
+
+if __name__ == "__main__":
+    main()
