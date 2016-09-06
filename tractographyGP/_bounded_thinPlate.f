@@ -10,6 +10,7 @@ cf2py threadsafe
 
       INTEGER nx,ny,i,j,cmin,cmax
       DOUBLE PRECISION C(nx,ny)
+      DOUBLE PRECISION aux
       LOGICAL symm
       DOUBLE PRECISION R
       
@@ -24,7 +25,8 @@ cf2py threadsafe
           C(j,j)=1.0D0
         
           do i=1,j-1
-            C(i,j) = thinPlate2D(C(i,j),R)
+            aux = thinPlate2D(C(i,j),R)
+            C(i,j) = aux
           enddo
         enddo
 
@@ -89,7 +91,7 @@ cf2py threadsafe
 
 
 c
-      DOUBLE PRECISION FUNCTION thinPlate2D(d,R)
+      FUNCTION thinPlate2D(d,R)
 
       DOUBLE PRECISION d,R
       DOUBLE PRECISION t
@@ -195,7 +197,7 @@ c      enddo
       return
       END
  
-      DOUBLE PRECISION FUNCTION covIntegralThinPlateR3Normalized(
+      FUNCTION covIntegralThinPlateR3Normalized(
      &                                                    w,Q,R)
 
       double precision w,Q,R
@@ -230,7 +232,7 @@ c      enddo
       end
 
 
-      DOUBLE PRECISION function covIntTPR3NwLTRminusQ (w, Q, R)
+      FUNCTION covIntTPR3NwLTRminusQ (w, Q, R)
         double precision w
         double precision Q
         double precision R
@@ -250,7 +252,7 @@ c      enddo
         return 
       end
 
-      double precision function covIntTP3NRminusQLTw (w, Q, R)
+      FUNCTION covIntTP3NRminusQLTw (w, Q, R)
         double precision w
         double precision Q
         double precision R
@@ -303,7 +305,7 @@ c      enddo
 
       end
 
-      double precision function covIntTP3NwGTR (w, Q, R)
+      FUNCTION covIntTP3NwGTR (w, Q, R)
         double precision w
         double precision Q
         double precision R

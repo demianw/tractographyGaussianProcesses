@@ -3,3 +3,20 @@ This software implements the clustering method described in
 D. Wassermann, L. Bloy, E. Kanterakis, R. Verma, and R. Deriche. Unsupervised white matter fiber clustering and tract probability map generation: Applications of a gaussian process framework for white matter fibers. NeuroImage, 51(1):228–241, 2010.
 
 If you use it you MUST cite this journal publication.
+
+
+Installation with anaconda
+==========================
+Fortran is needed, you can install it with this
+
+conda install -c uvcdat gfortran=4.9.3
+
+For I/O in the example you'll need tract_querier
+
+http://tract-querier.readthedocs.io/en/latest/index.html
+
+Then you perform
+
+python setup.py install
+
+Finally you can run the small example in the example folder

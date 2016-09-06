@@ -15,15 +15,6 @@ config.add_extension(name='bounded_thinPlate',
   f2py_options=['no-lower'],
 )
 
-config.add_extension(name='readVtkPolyData_ext',
-  sources=['tractographyGP/readVtkPolyData_ext.cpp'],
-  include_dirs=[ i for i in ('@VTK_INCLUDE_DIRS@').split(';')  if len(i)>0 ],
-  libraries= [ l for l in ('@vtkFiltering_LIB_DEPENDS@'+';'+'@vtkIO_LIB_DEPENDS@').split(';')+['vtkIO'] if len(l)>0 and l!='general' ],
-  library_dirs = [ ld for ld in ('@VTK_LIBRARY_DIRS@').split(';') if len(ld)>0 ],
-  language='c++',
-)
-
-
 config_dict = config.todict()
 try:
     config_dict.pop('packages')

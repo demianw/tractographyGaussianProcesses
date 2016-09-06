@@ -1,5 +1,5 @@
 import tractography
 import slicerInterface
 import agglomerativeClustering
-import vtkInterface
+# import vtkInterface
 import fiberGPAnalysis
